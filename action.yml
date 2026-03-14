@@ -40,7 +40,14 @@ runs:
     - uses: actions/setup-node@v6
       with:
         node-version: ${{ inputs.node-version }}
-        cache: ${{ inputs.package-manager }}
+        # Only enable caching if the corresponding lock file exists
+        cache: >-
+          ${{
+            (inputs.package-manager == 'pnpm' && hashFiles('pnpm-lock.yaml') != '') && 'pnpm' ||
+            (inputs.package-manager == 'yarn' && hashFiles('yarn.lock') != '') && 'yarn' ||
+            (inputs.package-manager == 'npm' && hashFiles('package-lock.json') != '') && 'npm' ||
+            ''
+          }}
     - id: package-manager
       run: |
         if [ "${{ inputs.package-manager }}" == "yarn" ]; then
