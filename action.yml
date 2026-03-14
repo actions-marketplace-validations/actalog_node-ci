@@ -14,39 +14,89 @@ inputs:
   node-version:
     required: false
     default: 24
+  package-manager:
+    required: false
+    default: npm
+    description: 'The package manager to use (npm, yarn, or pnpm)'
   sonar-token:
     required: false
 
 runs:
   using: composite
   steps:
+    - uses: actalog/expect@v1
+      with:
+        type: enum
+        value: ${{ inputs.package-manager }}
+        options: npm,yarn,pnpm
+    # First call: Install Node.js so that 'corepack' is available in the environment
     - uses: actions/setup-node@v6
       with:
         node-version: ${{ inputs.node-version }}
-        cache: npm
+    - run: corepack enable
+      shell: bash
+    # Second call: Configure cache. This must happen AFTER 'corepack enable'
+    # so that the caching logic can find the pnpm/yarn executables in the PATH.
+    - uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node-version }}
+        # Only enable caching if the corresponding lock file exists
+        cache: >-
+          ${{
+            (inputs.package-manager == 'pnpm' && hashFiles('pnpm-lock.yaml') != '') && 'pnpm' ||
+            (inputs.package-manager == 'yarn' && hashFiles('yarn.lock') != '') && 'yarn' ||
+            (inputs.package-manager == 'npm' && hashFiles('package-lock.json') != '') && 'npm' ||
+            ''
+          }}
+    - id: package-manager
+      run: |
+        if [ "${{ inputs.package-manager }}" == "yarn" ]; then
+          echo "pkg_cmd=yarn" >> $GITHUB_OUTPUT
+          echo "install_cmd=yarn install --immutable || yarn install" >> $GITHUB_OUTPUT
+        elif [ "${{ inputs.package-manager }}" == "pnpm" ]; then
+          echo "pkg_cmd=pnpm" >> $GITHUB_OUTPUT
+          echo "install_cmd=pnpm install --frozen-lockfile || pnpm install" >> $GITHUB_OUTPUT
+        else
+          echo "pkg_cmd=npm" >> $GITHUB_OUTPUT
+          echo "install_cmd=npm ci || npm install" >> $GITHUB_OUTPUT
+        fi
+      shell: bash
     - id: scripts
       run: |
         scripts=$(cat package.json | jq -c '.scripts | keys')
         echo "scripts=$scripts" >> $GITHUB_OUTPUT
       shell: bash
-    - run: time (npm ci || npm install)
+    - id: install
+      run: |
+        start=$(date +%s)
+        ${{ steps.package-manager.outputs.install_cmd }}
+        echo "duration=$(( $(date +%s) - start ))s" >> $GITHUB_OUTPUT
       shell: bash
     - id: build
       if: ${{ contains(steps.scripts.outputs.scripts, 'build') && !contains(inputs.except, 'build') }}
-      run: time npm run build
+      run: |
+        start=$(date +%s)
+        ${{ steps.package-manager.outputs.pkg_cmd }} run build
+        echo "duration=$(( $(date +%s) - start ))s" >> $GITHUB_OUTPUT
       shell: bash
     - id: lint
       if: ${{ contains(steps.scripts.outputs.scripts, 'lint') && !contains(inputs.except, 'lint') }}
-      run: time npm run lint
+      run: |
+        start=$(date +%s)
+        ${{ steps.package-manager.outputs.pkg_cmd }} run lint
+        echo "duration=$(( $(date +%s) - start ))s" >> $GITHUB_OUTPUT
       shell: bash
     - id: test
       if: ${{ contains(steps.scripts.outputs.scripts, 'test') && !contains(inputs.except, 'test') }}
-      run: npm test
+      run: |
+        start=$(date +%s)
+        ${{ steps.package-manager.outputs.pkg_cmd }} test
+        echo "duration=$(( $(date +%s) - start ))s" >> $GITHUB_OUTPUT
       shell: bash
-    - run: npm run test:e2e
+    - run: ${{ steps.package-manager.outputs.pkg_cmd }} run test:e2e
       if: ${{ contains(steps.scripts.outputs.scripts, 'test:e2e') && !contains(inputs.except, 'test:e2e') }}
       shell: bash
-    - run: npm run test:cov
+    - run: ${{ steps.package-manager.outputs.pkg_cmd }} run test:cov
       if: ${{ contains(steps.scripts.outputs.scripts, 'test:cov') && !contains(inputs.except, 'test') }}
       shell: bash
     - if: ${{ inputs.sonar-token && inputs.github-token }}
@@ -71,7 +121,7 @@ runs:
 
         {
           echo 'outdated<<EOF'
-          echo "$(npm outdated)"
+          echo "$(${{ steps.package-manager.outputs.pkg_cmd }} outdated)"
           echo 'EOF'
         } >> $GITHUB_OUTPUT
       shell: bash
@@ -87,11 +137,12 @@ runs:
 
           ## Steps
 
-          | Step      | Status                     |
-          | --------- | -------------------------- |
-          | **Build** | ${{ steps.build.outcome }} |
-          | **Lint**  | ${{ steps.lint.outcome }}  |
-          | **Test**  | ${{ steps.test.outcome }}  |
+          | Step | Status | Duration |
+          | :--- | :--- | :--- |
+          | **Install** | ${{ steps.install.outcome }} | ${{ steps.install.outputs.duration }} |
+          | **Build**   | ${{ steps.build.outcome }}   | ${{ steps.build.outputs.duration || '-' }} |
+          | **Lint**    | ${{ steps.lint.outcome }}    | ${{ steps.lint.outputs.duration || '-' }} |
+          | **Test**    | ${{ steps.test.outcome }}    | ${{ steps.test.outputs.duration || '-' }} |
 
           ## Statistics
 
@@ -108,4 +159,5 @@ runs:
           * **Runner OS:** ${{ runner.os }}
           * **Runner Arch:** ${{ runner.arch }}
           * **Node version:** ${{ inputs.node-version }}
+          * **Package manager:** ${{ inputs.package-manager }}
       continue-on-error: true
