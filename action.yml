@@ -29,12 +29,18 @@ runs:
         type: enum
         value: ${{ inputs.package-manager }}
         options: npm,yarn,pnpm
+    # First call: Install Node.js so that 'corepack' is available in the environment
+    - uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node-version }}
+    - run: corepack enable
+      shell: bash
+    # Second call: Configure cache. This must happen AFTER 'corepack enable'
+    # so that the caching logic can find the pnpm/yarn executables in the PATH.
     - uses: actions/setup-node@v6
       with:
         node-version: ${{ inputs.node-version }}
         cache: ${{ inputs.package-manager }}
-    - run: corepack enable
-      shell: bash
     - id: package-manager
       run: |
         if [ "${{ inputs.package-manager }}" == "yarn" ]; then
