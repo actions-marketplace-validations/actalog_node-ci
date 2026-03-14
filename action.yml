@@ -66,19 +66,32 @@ runs:
         scripts=$(cat package.json | jq -c '.scripts | keys')
         echo "scripts=$scripts" >> $GITHUB_OUTPUT
       shell: bash
-    - run: time (${{ steps.package-manager.outputs.install_cmd }})
+    - id: install
+      run: |
+        start=$(date +%s)
+        ${{ steps.package-manager.outputs.install_cmd }}
+        echo "duration=$(( $(date +%s) - start ))s" >> $GITHUB_OUTPUT
       shell: bash
     - id: build
       if: ${{ contains(steps.scripts.outputs.scripts, 'build') && !contains(inputs.except, 'build') }}
-      run: time ${{ steps.package-manager.outputs.pkg_cmd }} run build
+      run: |
+        start=$(date +%s)
+        ${{ steps.package-manager.outputs.pkg_cmd }} run build
+        echo "duration=$(( $(date +%s) - start ))s" >> $GITHUB_OUTPUT
       shell: bash
     - id: lint
       if: ${{ contains(steps.scripts.outputs.scripts, 'lint') && !contains(inputs.except, 'lint') }}
-      run: time ${{ steps.package-manager.outputs.pkg_cmd }} run lint
+      run: |
+        start=$(date +%s)
+        ${{ steps.package-manager.outputs.pkg_cmd }} run lint
+        echo "duration=$(( $(date +%s) - start ))s" >> $GITHUB_OUTPUT
       shell: bash
     - id: test
       if: ${{ contains(steps.scripts.outputs.scripts, 'test') && !contains(inputs.except, 'test') }}
-      run: ${{ steps.package-manager.outputs.pkg_cmd }} test
+      run: |
+        start=$(date +%s)
+        ${{ steps.package-manager.outputs.pkg_cmd }} test
+        echo "duration=$(( $(date +%s) - start ))s" >> $GITHUB_OUTPUT
       shell: bash
     - run: ${{ steps.package-manager.outputs.pkg_cmd }} run test:e2e
       if: ${{ contains(steps.scripts.outputs.scripts, 'test:e2e') && !contains(inputs.except, 'test:e2e') }}
@@ -124,11 +137,12 @@ runs:
 
           ## Steps
 
-          | Step      | Status                     |
-          | --------- | -------------------------- |
-          | **Build** | ${{ steps.build.outcome }} |
-          | **Lint**  | ${{ steps.lint.outcome }}  |
-          | **Test**  | ${{ steps.test.outcome }}  |
+          | Step | Status | Duration |
+          | :--- | :--- | :--- |
+          | **Install** | ${{ steps.install.outcome }} | ${{ steps.install.outputs.duration }} |
+          | **Build**   | ${{ steps.build.outcome }}   | ${{ steps.build.outputs.duration || '-' }} |
+          | **Lint**    | ${{ steps.lint.outcome }}    | ${{ steps.lint.outputs.duration || '-' }} |
+          | **Test**    | ${{ steps.test.outcome }}    | ${{ steps.test.outputs.duration || '-' }} |
 
           ## Statistics
 
