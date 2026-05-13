@@ -24,4 +24,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actalog/node-ci@v3
+        with:
+          package-manager: pnpm # optional, default is npm
 ```
+
+## Inputs
+
+| Name              | Description                                        | Default |
+| ----------------- | -------------------------------------------------- | ------- |
+| `node-version`    | Node.js version                                    | `24`    |
+| `package-manager` | Package manager to use (`npm`, `yarn`, or `pnpm`)   | `npm`   |
+| `except`          | Scripts to skip (comma-separated: `build`, `lint`) | ``      |
+| `github-token`    | GitHub Token (for SonarCloud and PR comments)      | ``      |
+| `sonar-token`     | SonarCloud Token                                   | ``      |

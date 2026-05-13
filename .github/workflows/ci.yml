@@ -19,7 +19,10 @@ jobs:
           name: action
           path: action.yml
   test:
-    name: 'Test: default usage'
+    name: 'Test: package manager ${{ matrix.package-manager }}'
+    strategy:
+      matrix:
+        package-manager: [npm, yarn, pnpm]
     runs-on: ubuntu-latest
     needs:
       - upload-action
@@ -29,6 +32,8 @@ jobs:
           repository: gabrielrufino/node-template
       - uses: actions/download-artifact@v4
       - uses: ./action/
+        with:
+          package-manager: ${{ matrix.package-manager }}
   test-using-except:
     name: "Test: using 'except'"
     runs-on: ubuntu-latest
